@@ -7,6 +7,7 @@ import DashboardPage from './pages/DashboardPage';
 import UsersPage from './pages/UsersPage';
 import ToolsPage from './pages/ToolsPage';
 import LoansPage from './pages/LoansPage';
+import ConfigPage from './pages/ConfigPage';
 
 // Protege rutas para usuarios autenticados
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -35,7 +36,7 @@ const App: React.FC = () => {
             <Route path="tools" element={<ToolsPage />} />
             <Route path="loans" element={<LoansPage />} />
             <Route path="my-loans" element={<div>Próximamente: Mis Préstamos</div>} />
-            <Route path="settings" element={<div>Próximamente: Configuración</div>} />
+            <Route path="settings" element={<ConfigPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

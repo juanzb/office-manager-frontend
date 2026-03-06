@@ -1,35 +1,92 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/axios';
-import type { Loan } from '../types';
+import type { Loan, User, Tool } from '../types';
+import Modal from '../components/Modal';
 import { 
   Search,
   CheckCircle,
   Clock,
   RotateCcw,
   Plus,
-  History
+  History,
+  User as UserIcon,
+  Wrench,
+  Save,
+  Loader2
 } from 'lucide-react';
 
 const LoansPage: React.FC = () => {
   const [loans, setLoans] = useState<Loan[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [tools, setTools] = useState<Tool[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Modal states
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    userId: '',
+    toolId: ''
+  });
 
-  const fetchLoans = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/loans');
-      setLoans(response.data.data);
+      const [loansRes, usersRes, toolsRes] = await Promise.all([
+        api.get('/loans'),
+        api.get('/users'),
+        api.get('/tools')
+      ]);
+      setLoans(loansRes.data.data);
+      setUsers(usersRes.data.data);
+      // Filter only available tools for the form
+      setTools(toolsRes.data.data.filter((t: Tool) => t.isAvailable));
     } catch (error) {
-      console.error('Error fetching loans', error);
+      console.error('Error fetching data', error);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchLoans();
+    fetchData();
   }, []);
+
+  const handleCreateLoan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setSubmitting(true);
+      await api.post('/loans', {
+        userId: parseInt(formData.userId),
+        toolIds: [parseInt(formData.toolId)]
+      });
+      setIsModalOpen(false);
+      setFormData({ userId: '', toolId: '' });
+      fetchData();
+    } catch (error) {
+      console.error('Error creating loan', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleReturnLoan = async (loan: Loan) => {
+    if (!window.confirm('¿Confirmar devolución de la herramienta?')) return;
+    try {
+      await api.delete('/loans/return', {
+        data: {
+          userId: Number(loan.user.id),
+          toolId: loan.tool.id
+        }
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Error returning loan', error);
+    }
+  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('es-ES', {
@@ -40,6 +97,12 @@ const LoansPage: React.FC = () => {
       minute: '2-digit'
     });
   };
+
+  const filteredLoans = loans.filter(loan => 
+    loan.user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    loan.tool.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    loan.tool.code.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -54,7 +117,10 @@ const LoansPage: React.FC = () => {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <button className="w-full md:w-auto flex items-center justify-center gap-2 bg-amber-500 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-amber-600 transition-all shadow-lg active:scale-[0.98]">
+        <button 
+          onClick={() => setIsModalOpen(true)}
+          className="w-full md:w-auto flex items-center justify-center gap-2 bg-amber-500 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-amber-600 transition-all shadow-lg active:scale-[0.98]"
+        >
           <Plus size={20} />
           <span>Registrar Préstamo</span>
         </button>
@@ -79,7 +145,7 @@ const LoansPage: React.FC = () => {
                     <td colSpan={5} className="px-6 py-4"><div className="h-10 bg-gray-100 rounded-xl w-full"></div></td>
                   </tr>
                 ))
-              ) : loans.length === 0 ? (
+              ) : filteredLoans.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-20 text-center text-slate-400 font-bold uppercase tracking-widest text-xs italic">
                     <History size={48} className="mx-auto mb-4 opacity-10" />
@@ -87,7 +153,7 @@ const LoansPage: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                loans.map((loan) => (
+                filteredLoans.map((loan) => (
                   <tr key={loan.id} className="hover:bg-slate-50/50 transition-colors group">
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
@@ -120,7 +186,10 @@ const LoansPage: React.FC = () => {
                     <td className="px-6 py-4">
                       <div className="flex justify-end">
                         {loan.status === 'active' && (
-                          <button className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-800 transition-all active:scale-95 shadow-lg">
+                          <button 
+                            onClick={() => handleReturnLoan(loan)}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-800 transition-all active:scale-95 shadow-lg"
+                          >
                             <RotateCcw size={14} /> Devolver
                           </button>
                         )}
@@ -133,6 +202,59 @@ const LoansPage: React.FC = () => {
           </table>
         </div>
       </div>
+
+      <Modal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        title="Nuevo Préstamo"
+      >
+        <form onSubmit={handleCreateLoan} className="space-y-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Seleccionar Usuario</label>
+            <div className="relative">
+              <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
+              <select 
+                required
+                className="w-full pl-12 pr-4 py-4 rounded-2xl bg-slate-50 border-2 border-transparent focus:bg-white focus:border-amber-500 transition-all text-sm font-bold outline-none appearance-none"
+                value={formData.userId}
+                onChange={e => setFormData({ ...formData, userId: e.target.value })}
+              >
+                <option value="">Buscar usuario...</option>
+                {users.map(user => (
+                  <option key={user.id} value={user.id}>{user.name} ({user.email})</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Seleccionar Herramienta</label>
+            <div className="relative">
+              <Wrench className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
+              <select 
+                required
+                className="w-full pl-12 pr-4 py-4 rounded-2xl bg-slate-50 border-2 border-transparent focus:bg-white focus:border-amber-500 transition-all text-sm font-bold outline-none appearance-none"
+                value={formData.toolId}
+                onChange={e => setFormData({ ...formData, toolId: e.target.value })}
+              >
+                <option value="">Buscar herramienta disponible...</option>
+                {tools.map(tool => (
+                  <option key={tool.id} value={tool.id}>{tool.name} - {tool.code}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <button 
+            disabled={submitting}
+            type="submit" 
+            className="w-full flex items-center justify-center gap-2 bg-amber-500 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-amber-600 transition-all shadow-xl shadow-amber-100 active:scale-95 disabled:opacity-50"
+          >
+            {submitting ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
+            <span>Registrar Préstamo</span>
+          </button>
+        </form>
+      </Modal>
     </div>
   );
 };

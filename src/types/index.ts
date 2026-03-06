@@ -1,5 +1,17 @@
 import { Role, Permission } from './enums';
 
+export interface Area {
+  id: number;
+  name: string;
+  code: string;
+}
+
+export interface Contract {
+  id: number;
+  name: string;
+  code: string;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -8,6 +20,10 @@ export interface User {
   permissions: Permission[];
   avatar?: string;
   isActive: boolean;
+  areaId?: number;
+  contractId?: number;
+  area?: Area;
+  contract?: Contract;
   createdAt: string;
   updatedAt: string;
 }
@@ -18,7 +34,9 @@ export interface Tool {
   description: string;
   image?: string;
   isAvailable: boolean;
-  code: string;
+  reference: string;
+  serial: string;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
 }
